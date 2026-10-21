@@ -1,3 +1,5 @@
+
+
 import { useState } from 'react'
 import './App.css'
 
@@ -28,6 +30,30 @@ const destinations = [
   },
 ]
 
+const interestOptions = [
+  'Nature',
+  'Food',
+  'Adventure',
+  'History',
+  'Shopping',
+  'Relaxation',
+]
+
+const budgetLabels = {
+  accommodationINR: 'Accommodation',
+  foodINR: 'Food',
+  transportINR: 'Transport',
+  activitiesINR: 'Activities',
+  miscellaneousINR: 'Miscellaneous',
+}
+
+function formatINR(value) {
+  const amount = Number(value)
+  return Number.isFinite(amount)
+    ? `₹${amount.toLocaleString('en-IN')}`
+    : '—'
+}
+
 function App() {
   const [activePage, setActivePage] = useState('Dashboard')
   const [destination, setDestination] = useState('')
@@ -37,15 +63,7 @@ function App() {
   const [travelStyle, setTravelStyle] = useState('Adventure')
   const [interests, setInterests] = useState(['Nature'])
   const [itinerary, setItinerary] = useState(null)
-
-  const interestOptions = [
-    'Nature',
-    'Food',
-    'Adventure',
-    'History',
-    'Shopping',
-    'Relaxation',
-  ]
+  const [savedPlaces, setSavedPlaces] = useState([])
 
   function toggleInterest(interest) {
     setInterests((current) =>
@@ -55,7 +73,15 @@ function App() {
     )
   }
 
-  function planTrip(event) {
+  function toggleSavedPlace(name) {
+    setSavedPlaces((current) =>
+      current.includes(name)
+        ? current.filter((item) => item !== name)
+        : [...current, name]
+    )
+  }
+
+  async function planTrip(event) {
     event.preventDefault()
 
     if (!destination.trim()) {
@@ -63,18 +89,57 @@ function App() {
       return
     }
 
-    const days = Number(duration)
+    try {
+      const response = await fetch(
+        'http://127.0.0.1:5000/api/plan-trip',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            destination: destination.trim(),
+            days: Number(duration),
+            budget: Number(budget),
+            travellers: Number(travellers),
+            travelStyle,
+            interests,
+          }),
+        }
+      )
 
-    setItinerary({
-      destination: destination.trim(),
-      days,
-      budget,
-      travellers,
-      style: travelStyle,
-      interests,
-    })
+      const data = await response.json()
 
-    setActivePage('My Trips')
+      if (!response.ok) {
+        throw new Error(
+          data.error || data.message || 'Failed to plan your trip.'
+        )
+      }
+
+      const trip = data.trip
+      const ai = trip.itinerary || {}
+
+      setItinerary({
+        destination: trip.destination || destination.trim(),
+        days: trip.days ?? Number(duration),
+        budget: trip.budget ?? Number(budget),
+        travellers: trip.travellers ?? Number(travellers),
+        style: trip.travelStyle || trip.style || travelStyle,
+        interests: trip.interests || interests,
+        summary: ai.summary || '',
+        itinerary: Array.isArray(ai.days) ? ai.days : [],
+        budgetBreakdown: ai.budgetBreakdown || null,
+        travelTips: Array.isArray(ai.travelTips) ? ai.travelTips : [],
+      })
+
+      setActivePage('My Trips')
+    } catch (error) {
+      console.error('Error planning trip:', error)
+      alert(
+        error.message ||
+          'Could not connect to the backend. Please check that Flask is running.'
+      )
+    }
   }
 
   function chooseDestination(name) {
@@ -89,6 +154,10 @@ function App() {
     'My Trips': 'Your travel collection',
     'Saved Places': 'Places worth remembering',
   }
+
+  const savedDestinationList = destinations.filter((place) =>
+    savedPlaces.includes(place.name)
+  )
 
   return (
     <div className="app-shell">
@@ -126,6 +195,9 @@ function App() {
               {label}
               {label === 'My Trips' && itinerary && (
                 <span className="nav-count">1</span>
+              )}
+              {label === 'Saved Places' && savedPlaces.length > 0 && (
+                <span className="nav-count">{savedPlaces.length}</span>
               )}
             </button>
           ))}
@@ -169,7 +241,9 @@ function App() {
         <div className="page-content">
           <section className="welcome-row">
             <div>
-              <div className="eyebrow">YOUR PERSONAL TRAVEL ASSISTANT</div>
+              <div className="eyebrow">
+                YOUR PERSONAL TRAVEL ASSISTANT
+              </div>
               <h1>{pageTitles[activePage]}</h1>
               <p className="page-subtitle">
                 Your next great story starts with a destination.
@@ -183,11 +257,16 @@ function App() {
               <section className="hero-banner">
                 <div className="hero-orb orb-one" />
                 <div className="hero-orb orb-two" />
+
                 <div className="hero-content">
                   <span className="hero-badge">
                     ✦ YOUR NEXT ADVENTURE AWAITS
                   </span>
-                  <h2>Less planning.<br />More wandering.</h2>
+                  <h2>
+                    Less planning.
+                    <br />
+                    More wandering.
+                  </h2>
                   <p>
                     Create a trip that feels like you, built around
                     your budget, interests and travel style.
@@ -199,6 +278,7 @@ function App() {
                     Plan my trip <span>→</span>
                   </button>
                 </div>
+
                 <div className="hero-art" aria-hidden="true">
                   <div className="art-sun" />
                   <div className="art-mountain mountain-back" />
@@ -207,7 +287,9 @@ function App() {
                   <span className="art-star star-one">✦</span>
                   <span className="art-star star-two">✧</span>
                 </div>
-                <span className="hero-caption">GO WHERE YOU FEEL ALIVE.</span>
+                <span className="hero-caption">
+                  GO WHERE YOU FEEL ALIVE.
+                </span>
               </section>
 
               <section className="section-block">
@@ -226,38 +308,52 @@ function App() {
                 </div>
 
                 <div className="destination-grid">
-                  {destinations.map((place) => (
-                    <article className="destination-card" key={place.name}>
-                      <div className="destination-image">
-                        <img src={place.image} alt={place.name} />
-                        <span className="destination-tag">{place.tag}</span>
-                        <button
-                          className="save-button"
-                          aria-label={`Save ${place.name}`}
-                          onClick={() =>
-                            alert(`${place.name} is ready to add to your saved places!`)
-                          }
-                        >
-                          ♡
-                        </button>
-                      </div>
-                      <div className="destination-info">
-                        <div>
-                          <h3>{place.name}</h3>
-                          <p>{place.country}</p>
-                        </div>
-                        <span className="destination-days">
-                          ◷ {place.days}
-                        </span>
-                      </div>
-                      <button
-                        className="destination-link"
-                        onClick={() => chooseDestination(place.name)}
+                  {destinations.map((place) => {
+                    const isSaved = savedPlaces.includes(place.name)
+
+                    return (
+                      <article
+                        className="destination-card"
+                        key={place.name}
                       >
-                        Plan this trip <span>↗</span>
-                      </button>
-                    </article>
-                  ))}
+                        <div className="destination-image">
+                          <img src={place.image} alt={place.name} />
+                          <span className="destination-tag">
+                            {place.tag}
+                          </span>
+                          <button
+                            className="save-button"
+                            aria-label={
+                              isSaved
+                                ? `Remove ${place.name} from saved places`
+                                : `Save ${place.name}`
+                            }
+                            aria-pressed={isSaved}
+                            onClick={() => toggleSavedPlace(place.name)}
+                          >
+                            {isSaved ? '♥' : '♡'}
+                          </button>
+                        </div>
+
+                        <div className="destination-info">
+                          <div>
+                            <h3>{place.name}</h3>
+                            <p>{place.country}</p>
+                          </div>
+                          <span className="destination-days">
+                            ◷ {place.days}
+                          </span>
+                        </div>
+
+                        <button
+                          className="destination-link"
+                          onClick={() => chooseDestination(place.name)}
+                        >
+                          Plan this trip <span>↗</span>
+                        </button>
+                      </article>
+                    )
+                  })}
                 </div>
               </section>
 
@@ -265,7 +361,10 @@ function App() {
                 <div className="quick-plan-icon">✦</div>
                 <div>
                   <h3>Already have a destination in mind?</h3>
-                  <p>Tell us where you're headed and start building your itinerary.</p>
+                  <p>
+                    Tell us where you're headed and start building
+                    your itinerary.
+                  </p>
                 </div>
                 <button
                   className="primary-button"
@@ -287,13 +386,17 @@ function App() {
 
               <form onSubmit={planTrip}>
                 <div className="field-group">
-                  <label htmlFor="destination">Where do you want to go?</label>
+                  <label htmlFor="destination">
+                    Where do you want to go?
+                  </label>
                   <div className="input-with-icon">
                     <span>⌖</span>
                     <input
                       id="destination"
                       value={destination}
-                      onChange={(event) => setDestination(event.target.value)}
+                      onChange={(event) =>
+                        setDestination(event.target.value)
+                      }
                       placeholder="e.g. Manali, Goa, Jaipur..."
                       required
                     />
@@ -306,7 +409,9 @@ function App() {
                     <select
                       id="duration"
                       value={duration}
-                      onChange={(event) => setDuration(event.target.value)}
+                      onChange={(event) =>
+                        setDuration(event.target.value)
+                      }
                     >
                       {[1, 2, 3, 4, 5, 7, 10, 14].map((day) => (
                         <option key={day} value={day}>
@@ -323,7 +428,9 @@ function App() {
                       type="number"
                       min="1"
                       value={budget}
-                      onChange={(event) => setBudget(event.target.value)}
+                      onChange={(event) =>
+                        setBudget(event.target.value)
+                      }
                       required
                     />
                   </div>
@@ -333,11 +440,14 @@ function App() {
                     <select
                       id="travellers"
                       value={travellers}
-                      onChange={(event) => setTravellers(event.target.value)}
+                      onChange={(event) =>
+                        setTravellers(event.target.value)
+                      }
                     >
                       {[1, 2, 3, 4, 5, 6, 7, 8].map((number) => (
                         <option key={number} value={number}>
-                          {number} {number === 1 ? 'traveller' : 'travellers'}
+                          {number}{' '}
+                          {number === 1 ? 'traveller' : 'travellers'}
                         </option>
                       ))}
                     </select>
@@ -348,11 +458,21 @@ function App() {
                     <select
                       id="style"
                       value={travelStyle}
-                      onChange={(event) => setTravelStyle(event.target.value)}
+                      onChange={(event) =>
+                        setTravelStyle(event.target.value)
+                      }
                     >
-                      {['Adventure', 'Relaxation', 'Luxury', 'Budget',
-                        'Cultural', 'Family'].map((style) => (
-                        <option key={style} value={style}>{style}</option>
+                      {[
+                        'Adventure',
+                        'Relaxation',
+                        'Luxury',
+                        'Budget',
+                        'Cultural',
+                        'Family',
+                      ].map((style) => (
+                        <option key={style} value={style}>
+                          {style}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -360,7 +480,9 @@ function App() {
 
                 <div className="field-group interests-group">
                   <label>What are you into?</label>
-                  <p className="field-hint">Choose all that match your vibe.</p>
+                  <p className="field-hint">
+                    Choose all that match your vibe.
+                  </p>
                   <div className="interest-list">
                     {interestOptions.map((interest) => (
                       <button
@@ -371,15 +493,21 @@ function App() {
                         }`}
                         onClick={() => toggleInterest(interest)}
                       >
-                        {interests.includes(interest) ? '✓' : '+'} {interest}
+                        {interests.includes(interest) ? '✓' : '+'}{' '}
+                        {interest}
                       </button>
                     ))}
                   </div>
                 </div>
 
                 <div className="form-actions">
-                  <span className="form-note">✦ Your adventure starts here</span>
-                  <button className="primary-button submit-button" type="submit">
+                  <span className="form-note">
+                    ✦ Your adventure starts here
+                  </span>
+                  <button
+                    className="primary-button submit-button"
+                    type="submit"
+                  >
                     Create my itinerary <span>→</span>
                   </button>
                 </div>
@@ -394,24 +522,180 @@ function App() {
                   <span className="result-icon">✈</span>
                   <span className="eyebrow">YOUR TRIP SUMMARY</span>
                   <h2>{itinerary.destination} is calling!</h2>
+
                   <p className="result-description">
-                    Here's your trip brief. Your AI-generated itinerary
-                    will be connected in a later development step.
+                    {itinerary.summary ||
+                      "Your personalized travel plan is ready. Here's your trip at a glance."}
                   </p>
+
                   <div className="summary-grid">
-                    <div><span>Duration</span><strong>{itinerary.days} days</strong></div>
-                    <div><span>Budget</span><strong>₹{Number(itinerary.budget).toLocaleString('en-IN')}</strong></div>
-                    <div><span>Travellers</span><strong>{itinerary.travellers}</strong></div>
-                    <div><span>Travel style</span><strong>{itinerary.style}</strong></div>
+                    <div>
+                      <span>Duration</span>
+                      <strong>{itinerary.days} days</strong>
+                    </div>
+                    <div>
+                      <span>Budget</span>
+                      <strong>{formatINR(itinerary.budget)}</strong>
+                    </div>
+                    <div>
+                      <span>Travellers</span>
+                      <strong>{itinerary.travellers}</strong>
+                    </div>
+                    <div>
+                      <span>Travel style</span>
+                      <strong>{itinerary.style}</strong>
+                    </div>
                   </div>
+
                   <div className="result-interests">
                     <span>Interests</span>
                     <div className="interest-list">
-                      {itinerary.interests.length ? itinerary.interests.map((interest) => (
-                        <span className="interest-chip selected" key={interest}>{interest}</span>
-                      )) : <span>Not selected</span>}
+                      {itinerary.interests?.length ? (
+                        itinerary.interests.map((interest) => (
+                          <span
+                            className="interest-chip selected"
+                            key={interest}
+                          >
+                            {interest}
+                          </span>
+                        ))
+                      ) : (
+                        <span>Not selected</span>
+                      )}
                     </div>
                   </div>
+
+                  <div className="day-plans">
+                    <div className="eyebrow">YOUR DAILY ADVENTURE</div>
+                    <h2>Day-by-day itinerary</h2>
+
+                    {itinerary.itinerary.length > 0 ? (
+                      itinerary.itinerary.map((day, index) => (
+                        <article
+                          className="day-card"
+                          key={day.day || index}
+                        >
+                          <h3>
+                            Day {day.day || index + 1}
+                            {day.title ? ` — ${day.title}` : ''}
+                          </h3>
+
+                          {day.description && <p>{day.description}</p>}
+
+                          {Array.isArray(day.activities) &&
+                          day.activities.length > 0 ? (
+                            day.activities.map((activity, activityIndex) => {
+                              const isObject =
+                                activity !== null &&
+                                typeof activity === 'object'
+
+                              return (
+                                <div
+                                  className="activity-item"
+                                  key={activityIndex}
+                                >
+                                  <strong>
+                                    {isObject
+                                      ? activity.time || 'Activity'
+                                      : activity}
+                                  </strong>
+
+                                  {isObject && (
+                                    <>
+                                      {activity.activity && (
+                                        <p>{activity.activity}</p>
+                                      )}
+
+                                      {activity.description && (
+                                        <p>{activity.description}</p>
+                                      )}
+
+                                      {activity.location && (
+                                        <p>📍 {activity.location}</p>
+                                      )}
+
+                                      {activity.estimatedCostINR != null && (
+                                        <p>
+                                          Estimated cost:{' '}
+                                          {formatINR(
+                                            activity.estimatedCostINR
+                                          )}
+                                        </p>
+                                      )}
+
+                                      {activity.cost != null &&
+                                        activity.estimatedCostINR == null && (
+                                          <p>
+                                            Estimated cost:{' '}
+                                            {formatINR(activity.cost)}
+                                          </p>
+                                        )}
+                                    </>
+                                  )}
+                                </div>
+                              )
+                            })
+                          ) : (
+                            <p>
+                              {typeof day.activities === 'string'
+                                ? day.activities
+                                : 'No activities listed for this day.'}
+                            </p>
+                          )}
+                        </article>
+                      ))
+                    ) : (
+                      <p>
+                        No daily activities were returned. Please try
+                        generating your itinerary again.
+                      </p>
+                    )}
+                  </div>
+
+                  {itinerary.budgetBreakdown &&
+                    Object.keys(itinerary.budgetBreakdown).length > 0 && (
+                      <section className="day-plans">
+                        <div className="eyebrow">PLAN YOUR SPENDING</div>
+                        <h2>Estimated budget breakdown</h2>
+                        <p>
+                          These are AI-generated estimates, not live prices.
+                        </p>
+
+                        <div className="summary-grid">
+                          {Object.entries(budgetLabels).map(
+                            ([key, label]) =>
+                              itinerary.budgetBreakdown[key] != null && (
+                                <div key={key}>
+                                  <span>{label}</span>
+                                  <strong>
+                                    {formatINR(
+                                      itinerary.budgetBreakdown[key]
+                                    )}
+                                  </strong>
+                                </div>
+                              )
+                          )}
+                        </div>
+
+                        <div className="activity-item">
+                          <strong>Total trip budget</strong>
+                          <p>{formatINR(itinerary.budget)}</p>
+                        </div>
+                      </section>
+                    )}
+
+                  {itinerary.travelTips.length > 0 && (
+                    <section className="day-plans">
+                      <div className="eyebrow">TRAVEL SMART</div>
+                      <h2>Tips for your trip</h2>
+                      <ul>
+                        {itinerary.travelTips.map((tip, index) => (
+                          <li key={index}>{tip}</li>
+                        ))}
+                      </ul>
+                    </section>
+                  )}
+
                   <button
                     className="primary-button"
                     onClick={() => setActivePage('Plan a Trip')}
@@ -423,7 +707,9 @@ function App() {
                 <>
                   <div className="empty-illustration">✈</div>
                   <h2>Your travel story starts here.</h2>
-                  <p>You haven't planned a trip yet. Let's change that!</p>
+                  <p>
+                    You haven't planned a trip yet. Let's change that!
+                  </p>
                   <button
                     className="primary-button"
                     onClick={() => setActivePage('Plan a Trip')}
@@ -441,30 +727,70 @@ function App() {
                 <div>
                   <div className="eyebrow">YOUR WISHLIST</div>
                   <h2>Dream destinations</h2>
-                  <p>Choose a place and start planning your next escape.</p>
+                  <p>
+                    Choose a place and start planning your next escape.
+                  </p>
                 </div>
               </div>
-              <div className="destination-grid">
-                {destinations.map((place) => (
-                  <article className="destination-card" key={place.name}>
-                    <div className="destination-image">
-                      <img src={place.image} alt={place.name} />
-                      <span className="destination-tag">{place.tag}</span>
-                    </div>
-                    <div className="destination-info">
-                      <div><h3>{place.name}</h3><p>{place.country}</p></div>
-                    </div>
-                    <button className="destination-link" onClick={() => chooseDestination(place.name)}>
-                      Plan this trip <span>↗</span>
-                    </button>
-                  </article>
-                ))}
-              </div>
+
+              {savedDestinationList.length > 0 ? (
+                <div className="destination-grid">
+                  {savedDestinationList.map((place) => (
+                    <article
+                      className="destination-card"
+                      key={place.name}
+                    >
+                      <div className="destination-image">
+                        <img src={place.image} alt={place.name} />
+                        <span className="destination-tag">
+                          {place.tag}
+                        </span>
+                        <button
+                          className="save-button"
+                          aria-label={`Remove ${place.name} from saved places`}
+                          onClick={() => toggleSavedPlace(place.name)}
+                        >
+                          ♥
+                        </button>
+                      </div>
+
+                      <div className="destination-info">
+                        <div>
+                          <h3>{place.name}</h3>
+                          <p>{place.country}</p>
+                        </div>
+                      </div>
+
+                      <button
+                        className="destination-link"
+                        onClick={() => chooseDestination(place.name)}
+                      >
+                        Plan this trip <span>↗</span>
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-state">
+                  <div className="empty-illustration">♡</div>
+                  <h2>No saved places yet</h2>
+                  <p>
+                    Visit your Dashboard and tap the heart on a destination
+                    to add it to your wishlist.
+                  </p>
+                  <button
+                    className="primary-button"
+                    onClick={() => setActivePage('Dashboard')}
+                  >
+                    Explore destinations →
+                  </button>
+                </div>
+              )}
             </section>
           )}
 
           <footer className="page-footer">
-            <span>✈ TravelMate</span>
+            <span>✈️ TravelMate</span>
             <span>Made for the journeys that matter.</span>
           </footer>
         </div>

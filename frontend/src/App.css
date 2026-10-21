@@ -1285,3 +1285,41 @@ a {
     border-radius: 12px;
   }
 }
+.day-plans {
+  width: 100%;
+  margin: 32px 0;
+  text-align: left;
+}
+
+.day-plans > h2 {
+  margin: 10px 0 20px;
+}
+
+.day-card {
+  margin: 16px 0;
+  padding: 22px;
+  border: 1px solid #e4eaf1;
+  border-radius: 16px;
+  background: #ffffff;
+  color: #263449;
+  text-align: left;
+}
+
+.day-card h3 {
+  margin: 0 0 16px;
+  color: #1769aa;
+}
+
+.activity-item {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border-left: 3px solid #4c9be8;
+  border-radius: 5px;
+  background: #f5f8fc;
+}
+
+.activity-item p,
+.day-card p {
+  margin: 6px 0;
+  line-height: 1.6;
+}
